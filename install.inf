@@ -3,6 +3,7 @@ title=ASCII Art
 desc=Inserts text formatted via ASCII art font
 type=cudatext-plugin
 subdir=cuda_ascii_art
+homepage=https://github.com/CudaText-addons/cuda_ascii_art
 
 [item1]
 section=commands
