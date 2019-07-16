@@ -1,6 +1,6 @@
 [info]
 title=ASCII Art
-desc=Inserts text formatted via ASCII art font
+desc=Inserts text formatted via ASCII art font (using PyFiglet)
 type=cudatext-plugin
 subdir=cuda_ascii_art
 homepage=https://github.com/CudaText-addons/cuda_ascii_art
