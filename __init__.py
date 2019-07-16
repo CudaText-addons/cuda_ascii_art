@@ -29,7 +29,7 @@ class Command:
         self.ini_get()
         msg = 'Some Text'
         file_open('')
-        eol = '\n' #ed.get_prop(PROP_EOL)
+        eol = '\n'
         dirs = self.fonts()
         text = ''
         for (i, afont) in enumerate(dirs):
