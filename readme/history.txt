@@ -1,3 +1,6 @@
 
-1.0.0 (sep 2015)
--init
+2019.07.16
++ update lib to 0.8.post1
+
+2015.09
+initial version

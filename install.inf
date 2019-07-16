@@ -17,7 +17,7 @@ method=config_font
 
 [item3]
 section=commands
-caption=ASCII Art\Edit options
+caption=ASCII Art\Config
 method=config_all
 
 [item4]
