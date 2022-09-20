@@ -60,7 +60,7 @@ class Command:
 
     def config_font(self):
         dirs = self.fonts()
-        num = dlg_menu(MENU_LIST, '\n'.join(dirs))
+        num = dlg_menu(DMENU_LIST, dirs)
         if num is None:
             return
         self.ini_get()
