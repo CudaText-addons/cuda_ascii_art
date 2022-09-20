@@ -4,7 +4,7 @@
 - fix: usage of deleted CudaText API
 
 2019.07.16
-+ update lib to 0.8.post1
++ update pyfiglet lib to 0.8.post1
 
 2015.09
 initial version
