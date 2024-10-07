@@ -7,8 +7,10 @@ Python FIGlet adaption
 
 from __future__ import print_function, unicode_literals
 
+import itertools
+import importlib.resources
 import os
-import pkg_resources
+import pathlib
 import re
 import shutil
 import sys
@@ -131,18 +133,37 @@ class FigletFont(object):
         """
         Load font data if exist
         """
+        # Find a plausible looking font file.
+        data = None
+        font_path = None
         for extension in ('tlf', 'flf'):
             fn = '%s.%s' % (font, extension)
-            if pkg_resources.resource_exists('pyfiglet.fonts', fn):
-                data = pkg_resources.resource_string('pyfiglet.fonts', fn)
-                data = data.decode('UTF-8', 'replace')
-                return data
+            path = importlib.resources.files('pyfiglet.fonts').joinpath(fn)
+            if path.exists():
+                font_path = path
+                break
             else:
                 for location in ("./", SHARED_DIRECTORY):
                     full_name = os.path.join(location, fn)
                     if os.path.isfile(full_name):
-                        with open(full_name, 'rb') as f:
-                            return f.read().decode('UTF-8', 'replace')
+                        font_path = pathlib.Path(full_name)
+                        break
+
+        # Unzip the first file if this file/stream looks like a ZIP file.
+        if font_path:
+            with font_path.open('rb') as f:
+                if zipfile.is_zipfile(f):
+                    with zipfile.ZipFile(f) as zip_file:
+                        zip_font = zip_file.open(zip_file.namelist()[0])
+                        data = zip_font.read()
+                else:
+                    # ZIP file check moves the current file pointer - reset to start of file.
+                    f.seek(0)
+                    data = f.read()
+
+        # Return the decoded data (if any).
+        if data:
+            return data.decode('UTF-8', 'replace')
         else:
             raise FontNotFound(font)
 
@@ -157,19 +178,30 @@ class FigletFont(object):
         elif os.path.isfile(full_file):
             f = open(full_file, 'rb')
         else:
-            f = pkg_resources.resource_stream('pyfiglet.fonts', font)
-        header = f.readline().decode('UTF-8', 'replace')
+            f = importlib.resources.files('pyfiglet.fonts').joinpath(font).open('rb')
+
+        if zipfile.is_zipfile(f):
+            # If we have a match, the ZIP file spec says we should just read the first file in the ZIP.
+            with zipfile.ZipFile(f) as zip_file:
+                zip_font = zip_file.open(zip_file.namelist()[0])
+                header = zip_font.readline().decode('UTF-8', 'replace')
+        else:
+            # ZIP file check moves the current file pointer - reset to start of file.
+            f.seek(0)
+            header = f.readline().decode('UTF-8', 'replace')
+
         f.close()
+
         return cls.reMagicNumber.search(header)
 
     @classmethod
     def getFonts(cls):
-        all_files = pkg_resources.resource_listdir('pyfiglet', 'fonts')
+        all_files = importlib.resources.files('pyfiglet.fonts').iterdir()
         if os.path.isdir(SHARED_DIRECTORY):
-             all_files += os.listdir(SHARED_DIRECTORY)
-        return [font.rsplit('.', 2)[0] for font
+             all_files = itertools.chain(all_files, pathlib.Path(SHARED_DIRECTORY).iterdir())
+        return [font.name.split('.', 2)[0] for font
                 in all_files
-                if cls.isValidFont(font)]
+                if font.is_file() and cls.isValidFont(font.name)]
 
     @classmethod
     def infoFont(cls, font, short=False):
@@ -181,7 +213,7 @@ class FigletFont(object):
         reStartMarker = re.compile(r"""
             ^(FONT|COMMENT|FONTNAME_REGISTRY|FAMILY_NAME|FOUNDRY|WEIGHT_NAME|
               SETWIDTH_NAME|SLANT|ADD_STYLE_NAME|PIXEL_SIZE|POINT_SIZE|
-              RESOLUTION_X|RESOLUTION_Y|SPACING|AVERAGE_WIDTH|COMMENT|
+              RESOLUTION_X|RESOLUTION_Y|SPACING|AVERAGE_WIDTH|
               FONT_DESCENT|FONT_ASCENT|CAP_HEIGHT|X_HEIGHT|FACE_NAME|FULL_NAME|
               COPYRIGHT|_DEC_|DEFAULT_CHAR|NOTICE|RELATIVE_).*""", re.VERBOSE)
         reEndMarker = re.compile(r'^.*[@#$]$')
@@ -197,12 +229,12 @@ class FigletFont(object):
         """
         Install the specified font file to this system.
         """
-        if isinstance(pkg_resources.get_provider('pyfiglet'), pkg_resources.ZipProvider):
+        if hasattr(importlib.resources.files('pyfiglet'), 'resolve'):
+            # Figlet looks like a standard directory - so lets use that to install new fonts.
+            location = str(importlib.resources.files('pyfiglet.fonts'))
+        else:
             # Figlet is installed using a zipped resource - don't try to upload to it.
             location = SHARED_DIRECTORY
-        else:
-            # Figlet looks like a standard directory - so lets use that to install new fonts.
-            location = pkg_resources.resource_filename('pyfiglet', 'fonts')
 
         print("Installing {} to {}".format(file_name, location))
 
@@ -229,8 +261,12 @@ class FigletFont(object):
         Parse loaded font data for the rendering engine to consume
         """
         try:
+            # Remove any unicode line splitting characters other
+            # than CRLF - to match figlet line parsing
+            data = re.sub(r"[\u0085\u2028\u2029]", " ", self.data)
+
             # Parse first line of file, the header
-            data = self.data.splitlines()
+            data = data.splitlines()
 
             header = data.pop(0)
             if self.reMagicNumber.search(header) is None:
@@ -254,7 +290,7 @@ class FigletFont(object):
                 fullLayout = int(header[7])
 
             # if the new layout style isn't available,
-            # convert old layout style. backwards compatability
+            # convert old layout style. backwards compatibility
             if fullLayout is None:
                 if oldLayout == 0:
                     fullLayout = 64
@@ -286,7 +322,7 @@ class FigletFont(object):
                     line = data.pop(0)
                     if end is None:
                         end = self.reEndMarker.search(line).group(1)
-                        end = re.compile(re.escape(end) + r'{1,2}$')
+                        end = re.compile(re.escape(end) + r'{1,2}\s*$')
 
                     line = end.sub('', line)
 
@@ -295,12 +331,23 @@ class FigletFont(object):
                     chars.append(line)
                 return width, chars
 
-            # Load ASCII standard character set (32 - 127)
+            # Load ASCII standard character set (32 - 127).
+            # Don't skip space definition as later rendering pipeline will
+            # ignore all missing chars and space is critical for the line
+            # breaking logic.
             for i in range(32, 127):
                 width, letter = __char(data)
-                if ''.join(letter) != '':
+                if i == 32 or ''.join(letter) != '':
                     self.chars[i] = letter
                     self.width[i] = width
+
+            # Load German Umlaute - the follow directly after standard character 127
+            if data:
+                for i in 'ÄÖÜäöüß':
+                    width, letter = __char(data)
+                    if ''.join(letter) != '':
+                        self.chars[ord(i)] = letter
+                        self.width[ord(i)] = width
 
             # Load ASCII extended character set
             while data:
@@ -382,6 +429,23 @@ class FigletString(unicode_string):
             out.append(row.translate(self.__flip_map__))
 
         return self.newFromList(out)
+
+    # doesn't do self.strip() because it could remove leading whitespace on first line of the font
+    # doesn't do row.strip() because it could remove empty lines within the font character
+    def strip_surrounding_newlines(self):
+        out = []
+        chars_seen = False
+        for row in self.splitlines():
+            # if the row isn't empty or if we're in the middle of the font character, add the line.
+            if row.strip() != "" or chars_seen:
+                chars_seen = True
+                out.append(row)
+
+        # rstrip to get rid of the trailing newlines
+        return self.newFromList(out).rstrip()
+
+    def normalize_surrounding_newlines(self):
+        return '\n' + self.strip_surrounding_newlines() + '\n'
 
     def newFromList(self, list):
         return FigletString('\n'.join(list) + '\n')
@@ -593,7 +657,7 @@ class FigletBuilder(object):
         self.buffer[row] = addLeft + addRight[self.maxSmush:]
 
     def cutBufferCommon(self):
-        self.currentTotalWidth = len(self.buffer[0])
+        self.currentTotalWidth = 0
         self.buffer = ['' for i in range(self.font.height)]
         self.blankMarkers = list()
         self.prevCharWidth = 0
@@ -666,7 +730,8 @@ class FigletBuilder(object):
             if self.direction == 'right-to-left':
                 lineLeft, lineRight = lineRight, lineLeft
 
-            linebd = len(lineLeft.rstrip()) - 1
+            # Only strip ascii space to match figlet exactly.
+            linebd = len(lineLeft.rstrip(' ')) - 1
             if linebd < 0:
                 linebd = 0
 
@@ -676,7 +741,8 @@ class FigletBuilder(object):
                 linebd = 0
                 ch1 = ''
 
-            charbd = len(lineRight) - len(lineRight.lstrip())
+            # Only strip ascii space to match figlet exactly.
+            charbd = len(lineRight) - len(lineRight.lstrip(' '))
             if charbd < len(lineRight):
                 ch2 = lineRight[charbd]
             else:
@@ -702,9 +768,11 @@ class FigletBuilder(object):
         fonts where they would touch, see if they can be smushed together.
         Returns None if this cannot or should not be done.
         """
-        if left.isspace() is True:
+        # Don't use isspace because this also matches unicode chars that figlet
+        # treats as hard breaks
+        if left == ' ':
             return right
-        if right.isspace() is True:
+        if right == ' ':
             return left
 
         # Disallows overlapping if previous or current char has a width of 1 or
@@ -752,7 +820,7 @@ class FigletBuilder(object):
 
         if self.font.smushMode & self.SM_HIERARCHY:
             smushes += (
-                ('|', r'|/\[]{}()<>'),
+                ('|', r'/\[]{}()<>'),
                 (r'\/', '[]{}()<>'),
                 ('[]', '{}()<>'),
                 ('{}', '()<>'),
@@ -838,7 +906,7 @@ class Figlet(object):
 def color_to_ansi(color, isBackground):
     if not color:
         return ''
-
+    color = color.upper()
     if color.count(';') > 0 and color.count(';') != 2:
         raise InvalidColor('Specified color \'{}\' not a valid color in R;G;B format')
     elif color.count(';') == 0 and color not in COLOR_CODES:
@@ -882,6 +950,10 @@ def main():
                            '(default: %default)')
     parser.add_option('-r', '--reverse', action='store_true', default=False,
                       help='shows mirror image of output text')
+    parser.add_option('-n', '--normalize-surrounding-newlines', action='store_true', default=False,
+                      help='output has one empty line before and after')
+    parser.add_option('-s', '--strip-surrounding-newlines', action='store_true', default=False,
+                      help='removes empty leading and trailing lines')                      
     parser.add_option('-F', '--flip', action='store_true', default=False,
                       help='flips rendered output text over')
     parser.add_option('-l', '--list_fonts', action='store_true', default=False,
@@ -924,16 +996,24 @@ def main():
 
     text = ' '.join(args)
 
-    f = Figlet(
-        font=opts.font, direction=opts.direction,
-        justify=opts.justify, width=opts.width,
-    )
+    try:
+        f = Figlet(
+            font=opts.font, direction=opts.direction,
+            justify=opts.justify, width=opts.width,
+        )
+    except FontNotFound as err:
+        print(f"pyfiglet error: requested font {opts.font!r} not found.")
+        return 1
 
     r = f.renderText(text)
     if opts.reverse:
         r = r.reverse()
     if opts.flip:
         r = r.flip()
+    if opts.strip_surrounding_newlines:
+        r = r.strip_surrounding_newlines()
+    elif opts.normalize_surrounding_newlines:
+        r = r.normalize_surrounding_newlines()
 
     if sys.version_info > (3,):
         # Set stdout to binary mode
