@@ -34,7 +34,7 @@ class Command:
         dirs = self.fonts()
         text = ''
         for (i, afont) in enumerate(dirs):
-            msg_status('Preview fonts: %d / %d' % (i+1, len(dirs)))
+            msg_status('Preview fonts: %d / %d' % (i+1, len(dirs)), True)
             f = Figlet(font=afont, direction=self.op_direction, justify=self.op_justify, width=int(self.op_width))
             text += 'Font: '+afont+eol+f.renderText(msg)+eol+eol
         ed.insert(0, 0, text)
