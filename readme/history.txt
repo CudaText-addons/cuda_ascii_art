@@ -1,3 +1,6 @@
+2024.10.07
++ update pyfiglet lib to 1.0.2
+* change: config file is now settings/plugins.ini
 
 2022.09.20
 + update pkg_resources module to 58.0.3

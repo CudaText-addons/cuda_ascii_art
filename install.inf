@@ -15,12 +15,13 @@ section=commands
 caption=ASCII Art\Choose font...
 method=config_font
 
-[item3]
-section=commands
-caption=ASCII Art\Config
-method=config_all
-
 [item4]
 section=commands
 caption=ASCII Art\Preview fonts
 method=preview
+
+[item10]
+section=commands
+caption=ASCII Art\Config
+method=config_all
+menu=o

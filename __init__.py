@@ -5,7 +5,8 @@ import os
 sys.path.append(os.path.dirname(__file__))
 from .pyfiglet import Figlet
 
-ini = os.path.join(app_path(APP_DIR_SETTINGS), 'cuda_ascii_art.ini')
+config_filename = os.path.join(app_path(APP_DIR_SETTINGS), 'plugins.ini')
+config_section = 'ascii_art'
 
 class Command:
     op_font='slant'
@@ -14,16 +15,16 @@ class Command:
     op_width='80'
     
     def ini_get(self):
-        self.op_font = ini_read(ini, 'op', 'font', self.op_font)
-        self.op_direction = ini_read(ini, 'op', 'direction', self.op_direction)
-        self.op_justify = ini_read(ini, 'op', 'justify', self.op_justify)
-        self.op_width = ini_read(ini, 'op', 'width', self.op_width)
+        self.op_font      = ini_read(config_filename, config_section, 'font', self.op_font)
+        self.op_direction = ini_read(config_filename, config_section, 'direction', self.op_direction)
+        self.op_justify   = ini_read(config_filename, config_section, 'justify', self.op_justify)
+        self.op_width     = ini_read(config_filename, config_section, 'width', self.op_width)
 
     def ini_set(self):
-        ini_write(ini, 'op', 'font', self.op_font)
-        ini_write(ini, 'op', 'direction', self.op_direction)
-        ini_write(ini, 'op', 'justify', self.op_justify)
-        ini_write(ini, 'op', 'width', self.op_width)
+        ini_write(config_filename, config_section, 'font', self.op_font)
+        ini_write(config_filename, config_section, 'direction', self.op_direction)
+        ini_write(config_filename, config_section, 'justify', self.op_justify)
+        ini_write(config_filename, config_section, 'width', self.op_width)
         
     def preview(self):
         self.ini_get()
@@ -72,7 +73,11 @@ class Command:
     def config_all(self):
         self.ini_get()
         self.ini_set()
-        if os.path.isfile(ini):
-            file_open(ini)
-        else:
-            msg_box('Cannot create ini file', MB_OK)
+        if os.path.isfile(config_filename):
+            file_open(config_filename)
+            lines = [ed.get_text_line(i) for i in range(ed.get_line_count())]
+            try:
+                index = lines.index('['+config_section+']')
+                ed.set_caret(0, index)
+            except:
+                pass
